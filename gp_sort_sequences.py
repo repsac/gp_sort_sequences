@@ -5,6 +5,7 @@ from datetime import datetime
 
 DEFAULT_INTERVAL = 5
 
+
 def sort_sequences(paths,
                    destination,
                    interval=DEFAULT_INTERVAL,
@@ -33,7 +34,7 @@ def _move_raws(sorted_raws, destination, dryrun):
                 print("DRYRUN: creating path '%s'" % set_folder)
             else:
                 os.makedirs(set_folder)
-        
+
         for fi in each:
             if dryrun:
                 print("DRYRUN: Moving %s > %s" % (fi, set_folder))
@@ -57,7 +58,7 @@ def _sort_raw_files(raw_files, interval):
         diff = next_date - this_date
         if not interval-1 <= diff.seconds <= interval+1:
             sorted_raws.append([])
-    
+
     return sorted_raws
 
 
@@ -69,6 +70,7 @@ def _parse_raw_files(paths):
                 if fi.endswith('.GPR'):
                     raw_files.append(os.path.join(root, fi))
     return raw_files
+
 
 def _main():
     parser = argparse.ArgumentParser()
