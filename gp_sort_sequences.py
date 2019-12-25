@@ -30,10 +30,33 @@ subfolders under the specified output path.
 <OUTPUT>/SEQ002/JPG/G*.JPG
 <OUTPUT>/SEQ002/GPR/G*.GPR
 
+*IMPORTANT*
+This script does not try to process time-lapse movies, only image sequences.
+
 The --movie option will generate a 30fps movie from the JPG files only, and
 be created in the sequence root.
 
 <OUTPUT>/SEQ001/SEQ001.MP4
+
+==== COMMAND LINE USAGE ====
+# execute on a specified directory (output uses $PWD)
+> python -m gp_sort_sequeces <path to root folder>
+
+# execute on more than one root directory (all sorted data will be treated as
+# on and put in one destination folder)
+> python -m gp_sort_sequeces <path to folder1> <path to folder2>
+
+# specifiy the destination (path must already exist)
+> python -m gp_sort_sequeces <path to root folder> -d <destination>
+
+# enable additional verbosity
+> python -m gp_sort_sequeces <path to root folder> -d <destination> -v
+
+# generate a movie file from the JPG (non-raw) sequence files
+> python -m gp_sort_sequeces <path to root folder> -d <destination> -m
+
+# run the unit tests
+> python -m gp_sort_sequeces -u -v
 """
 import os
 import sys
@@ -48,16 +71,29 @@ from subprocess import Popen
 __VERBOSE = False
 __DRYRUN = False
 
-# Feel free to edit these as need be
+# The image sequence formats created by GoPro. This script does
+# not try to process time-lapse movies, only image sequences.
+# To avoid breaking logic in this script, keep the non-raw (JPG)
+# file in the first index.
+IMG_SEQUENCE_EXTENSIONS = ('JPG', 'GPR')
+
+# Change the prefix (before"{" to firt your needs)
+SEQUENCE_FOLDER = 'SEQ{:>03d}'
+
+# Feel free to edit these as need be to fit your workflow
 FPS = 30
 MOVIE_WIDTH = 1920
 MOVIE_EXTENSION = 'MP4'
+
+# If this string is changed you must ensure that the format()
+# parameters are satisfied in _build_command()
 FFMPEG = 'ffmpeg -r {fps:d} -f image2 -start_number {start_number} -i '\
          '{input_file} -vf "scale={movie_width}:-1" -vcodec libx264 '\
          '-crf 25 -pix_fmt yuv420p -y {output_file}'
 
 
-def sort_sequences(root_folder, output_directory,
+def sort_sequences(root_directory,
+                   destination_directory,
                    dryrun=False,
                    verbose=False,
                    movie=False):
@@ -66,9 +102,9 @@ def sort_sequences(root_folder, output_directory,
     GOPRO's source folder. All images belonging to the same sequence will
     be organized under a <SEQ000> folder, and be organized by file type.
 
-    :param root_folder: accepts either a single string or a list of strings
+    :param root_directory: accepts either a single string or a list of strings
                         as the root folder(s) to search for image sequences
-    :param output_directory: destination for the sorted image sequences
+    :param destination_directory: destination for the sorted image sequences
     :param dryrun: optional dryrun (no files will be moved or created)
     :param verbose: optional verbosity, leave off if you like it quiet
     :param movie: optional feature to create a preview movie from JPG files
@@ -88,12 +124,12 @@ def sort_sequences(root_folder, output_directory,
 
     set_params(verbose, dryrun)
 
-    if not isinstance(root_folder, list):
-        root_folder = [root_folder]
+    if not isinstance(root_directory, list):
+        root_directory = [root_directory]
     
     try:
-        file_mapping = _map_sequence_files(root_folder)
-        sorted_files = _sort_sequence_files(file_mapping, output_directory)
+        file_mapping = _map_sequence_files(root_directory)
+        sorted_files = _sort_sequence_files(file_mapping, destination_directory)
         if movie:
             movies = _generate_movie(sorted_files)
             for sequence in movies:
@@ -111,7 +147,7 @@ def _build_command(sequence, name, ext):
     build out the command used to create a preview movie file
     """
     basename, file_ext = os.path.splitext(name)
-    input_file = '{root}%{seq:02d}d{ext}'.format(
+    input_file = '{root}%{seq:03d}d{ext}'.format(
         root=basename[0],
         seq=len(basename[1:]),
         ext=file_ext)
@@ -137,14 +173,13 @@ def _generate_movie(sorted_files):
     for sequence in sorted_files:
         for ext in sorted_files[sequence]:
             # we aren't going to try and generate clips from raw media
-            if ext.lower() != 'jpg':
+            if ext.upper() != IMG_SEQUENCE_EXTENSIONS[0]:
                 continue
             name = sorted_files[sequence][ext][0]
             cmd, output_file = _build_command(sequence, name, ext)
 
-            movies.setdefault(sequence, {}).update({
-                MOVIE_EXTENSION: output_file
-            })
+            movies.setdefault(sequence, {}).setdefault(
+                MOVIE_EXTENSION, []).append(output_file)
 
             if __DRYRUN:
                 _print("Running command: {}".format(cmd))
@@ -158,15 +193,18 @@ def _generate_movie(sorted_files):
     return movies
 
 
-def _sort_sequence_files(file_mapping, output_directory):
+def _sort_sequence_files(file_mapping, destination_directory):
     """
     Sort the sequences into their own <sequence>/<extension folders
     """
     seq_counter = 1
     sorted_files = {}
-    for k, g in groupby(enumerate([*file_mapping]), lambda ix : ix[0] - ix[1]):
-        seq_name = 'SEQ{:>03d}'.format(seq_counter)
-        seq_folder_path = os.path.join(output_directory, seq_name)
+
+    keys = [*file_mapping]
+    keys.sort()
+    for k, g in groupby(enumerate(keys), lambda ix : ix[0] - ix[1]):
+        seq_name = SEQUENCE_FOLDER.format(seq_counter)
+        seq_folder_path = os.path.join(destination_directory, seq_name)
         sorted_files.update({seq_folder_path: {}})
         _mkdir(seq_folder_path)
         manifest = list(map(itemgetter(1), g))
@@ -187,13 +225,18 @@ def _sort_sequence_files(file_mapping, output_directory):
     return sorted_files
 
 
-def _map_sequence_files(root_folder):
+def _map_sequence_files(root_directory):
     """
-    creating a mapping associating the GPR and JPG files with
-    their corresponding integer identifier
+    Create a mapping associating the GPR and JPG files with
+    their corresponding integer identifier.
+
+    {
+        '30067' = ['../G0030067.JPG',
+                   '../G0030067.GPR']
+    }
     """
     file_mapping = {}
-    for each_folder in root_folder:
+    for each_folder in root_directory:
         for root, dirs, files in os.walk(each_folder):
             for fi in files:
                 name, ext = os.path.splitext(fi)
@@ -238,11 +281,15 @@ def _unittest(args):
     # emulate this behavior from GoPro cameras
     counter = 1000
 
-    while len(folders) < 6:
+    def set_sequence(first_frame):
         frame_tokens = [x for x in str(first_frame)]
         frame_tokens[0] = str(int(frame_tokens[0]) + 1)
         first_frame = int(''.join(frame_tokens))
         last_frame = randint(first_frame+500, first_frame+1000)
+        return (first_frame, last_frame)
+
+    while len(folders) < 6:
+        first_frame, last_frame = set_sequence(first_frame)
         for frame in range(first_frame, last_frame):
             if counter == 0:
                 counter = 1000
@@ -260,17 +307,16 @@ def _unittest(args):
         for filename in folder:
             # even if shooting in RAW (GPR) the GoPro still creates a
             # JPG file, we emulate that here
-            for ext in ('JPG', 'GPR'):
+            for ext in IMG_SEQUENCE_EXTENSIONS:
                 name = 'G{}.{}'.format(filename, ext)
                 Path(os.path.join(folder_paths[-1], name)).touch()
 
     for index, folder_path in enumerate(folder_paths):
         files = os.listdir(folder_path)
         if index+1 == len(folder_paths):
-            # the last folder will have an unknown number of files,
-            # so skip testing for that specific one
             break
-        assert len(files) == 2000, "Incorrect number of files in %s" % folder_path
+        assert len(files) == 2000, "Incorrect number of files in {}".format(
+            folder_path)
     
     def cleanup(paths):
         for path in paths:
@@ -281,41 +327,49 @@ def _unittest(args):
         assert len(results) != 0, "No media was found for testing"
         for sequence in results:
             for ext in results[sequence]:
-                if ext == MOVIE_EXTENSION:
-                    # at this time I don't have a good way to unittest
-                    # movie creation in a way that makes sense
-                    continue
                 data = []
+
                 for fname in results[sequence][ext]:
-                    message = "Extensions mismatched %s != %s" % (ext, fname)
+                    message = "Extensions mismatched {} != {}".format(ext,
+                                                                      fname)
                     assert fname.endswith(ext), message
+
+                    # we only want to do sequential testing on image file
+                    # that are generated from non-movie time-lapses
+                    if ext not in IMG_SEQUENCE_EXTENSIONS:
+                        continue
                     data.append(int(os.path.splitext(fname)[0][1:]))
-                message = "Sequence %s/%s is NOT sequential" % (sequence, ext)
+
+                if not data:
+                    continue
+
+                message = "Sequence {}/{} is NOT sequential".format(sequence,
+                                                                    ext)
                 result = sorted(data) == list(range(min(data), max(data)+1))
                 assert result, message
     
-    output_directory = tempfile.mkdtemp()
+    destination_directory = tempfile.mkdtemp()
     try:
-        results = sort_sequences(tmp_root, output_directory,
+        results = sort_sequences(tmp_root, destination_directory,
                                  verbose=args.verbose,
                                  dryrun=True if args.movie else args.dryrun,
                                  movie=args.movie)
         test_results(results)
     except:
-        cleanup([tmp_root, output_directory])
+        cleanup([tmp_root, destination_directory])
         raise
     else:
-        cleanup([tmp_root, output_directory])
+        cleanup([tmp_root, destination_directory])
 
 
 def _main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(usage=__doc__)
     parser.add_argument('paths', nargs='*',
                         default=[os.getcwd()],
                         help="Specify one or more root paths to search")
-    parser.add_argument('-o', '--output',
+    parser.add_argument('-d', '--destination',
                         default=os.getcwd(),
-                        help="Specify the output path (must already exist)")
+                        help="Specify the destination path (must already exist)")
     parser.add_argument('-u', '--unittest',
                         action='store_true',
                         help="Perform the unittests")
@@ -336,7 +390,7 @@ def _main():
         _unittest(args)
     else:
         sort_sequences(args.paths,
-                       args.output,
+                       args.destination,
                        dryrun=args.dryrun,
                        verbose=args.verbose,
                        movie=args.movie)
