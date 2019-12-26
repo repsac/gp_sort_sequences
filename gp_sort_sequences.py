@@ -143,7 +143,7 @@ def sort_sequences(root_directory,
 
 def _build_command(sequence, name, ext):
     """
-    build out the command used to create a preview movie file
+    Build out the command used to create a preview movie file
     """
     basename, file_ext = os.path.splitext(name)
     input_file = '{root}%{seq:03d}d{ext}'.format(
@@ -164,7 +164,7 @@ def _build_command(sequence, name, ext):
 
 def _generate_movie(sorted_files):
     """
-    create a movie clips, from JPG files, for each sequence
+    Create a movie clips, from JPG files, for each sequence
     """
     global __DRYRUN
 
@@ -230,8 +230,8 @@ def _map_sequence_files(root_directory):
     their corresponding integer identifier.
 
     {
-        '30067' = ['../G0030067.JPG',
-                   '../G0030067.GPR']
+        30067: ['../G0030067.JPG',
+                '../G0030067.GPR']
     }
     """
     file_mapping = {}
