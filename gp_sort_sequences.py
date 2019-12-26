@@ -1,4 +1,3 @@
-
 # MIT License
 #
 # Copyright (c) 2019 Ed Caspersen
@@ -23,12 +22,12 @@
 """
 Given one or more source folders, search for all JPG and GPR files from a
 GOPRO's source folder. The media will be sorted into /SEQ000/<EXT>
-subfolders under the specified output path.
+subfolders under the specified destination path.
 
-<OUTPUT>/SEQ001/JPG/G*.JPG
-<OUTPUT>/SEQ001/GPR/G*.GPR
-<OUTPUT>/SEQ002/JPG/G*.JPG
-<OUTPUT>/SEQ002/GPR/G*.GPR
+<DESTINATION>/SEQ001/JPG/G*.JPG
+<DESTINATION>/SEQ001/GPR/G*.GPR
+<DESTINATION>/SEQ002/JPG/G*.JPG
+<DESTINATION>/SEQ002/GPR/G*.GPR
 
 *IMPORTANT*
 This script does not try to process time-lapse movies, only image sequences.
@@ -36,10 +35,10 @@ This script does not try to process time-lapse movies, only image sequences.
 The --movie option will generate a 30fps movie from the JPG files only, and
 be created in the sequence root.
 
-<OUTPUT>/SEQ001/SEQ001.MP4
+<DESTINATION>/SEQ001/SEQ001.MP4
 
 ==== COMMAND LINE USAGE ====
-# execute on a specified directory (output uses $PWD)
+# execute on a specified directory (destination defaults to $PWD)
 > python -m gp_sort_sequeces <path to root folder>
 
 # execute on more than one root directory (all sorted data will be treated as
@@ -77,7 +76,7 @@ __DRYRUN = False
 # file in the first index.
 IMG_SEQUENCE_EXTENSIONS = ('JPG', 'GPR')
 
-# Change the prefix (before"{" to firt your needs)
+# Change the prefix (before"{" to fit your needs)
 SEQUENCE_FOLDER = 'SEQ{:>03d}'
 
 # Feel free to edit these as need be to fit your workflow
