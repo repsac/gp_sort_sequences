@@ -268,100 +268,7 @@ def _mkdir(path):
         _print("Created '{}'".format(path))
 
 
-def _unittest(args):
-    import tempfile
-    from random import randint
-    from pathlib import Path
-
-    first_frame = '00001'
-    folders = [[]]
-    # fat32 will cause sequences (commonly over 1000) to be
-    # broken out to multiple folders. this logic attempts to
-    # emulate this behavior from GoPro cameras
-    counter = 1000
-
-    def set_sequence(first_frame):
-        frame_tokens = [x for x in str(first_frame)]
-        frame_tokens[0] = str(int(frame_tokens[0]) + 1)
-        first_frame = int(''.join(frame_tokens))
-        last_frame = randint(first_frame+500, first_frame+1000)
-        return (first_frame, last_frame)
-
-    while len(folders) < 6:
-        first_frame, last_frame = set_sequence(first_frame)
-        for frame in range(first_frame, last_frame):
-            if counter == 0:
-                counter = 1000
-                folders.append([])
-            folders[-1].append('{:>07d}'.format(frame))
-            counter -= 1
-        first_frame = last_frame
-    
-    tmp_root = tempfile.mkdtemp()
-    folder_paths = []
-    for index, folder in enumerate(folders):
-        folder_name = '{:<03d}GOPRO'.format(index+1)
-        folder_paths.append(os.path.join(tmp_root, folder_name))
-        _mkdir(folder_paths[-1])
-        for filename in folder:
-            # even if shooting in RAW (GPR) the GoPro still creates a
-            # JPG file, we emulate that here
-            for ext in IMG_SEQUENCE_EXTENSIONS:
-                name = 'G{}.{}'.format(filename, ext)
-                Path(os.path.join(folder_paths[-1], name)).touch()
-
-    for index, folder_path in enumerate(folder_paths):
-        files = os.listdir(folder_path)
-        if index+1 == len(folder_paths):
-            break
-        assert len(files) == 2000, "Incorrect number of files in {}".format(
-            folder_path)
-    
-    def cleanup(paths):
-        for path in paths:
-            if os.path.exists(path):
-                shutil.rmtree(path)
-
-    def test_results(results):
-        assert len(results) != 0, "No media was found for testing"
-        for sequence in results:
-            for ext in results[sequence]:
-                data = []
-
-                for fname in results[sequence][ext]:
-                    message = "Extensions mismatched {} != {}".format(ext,
-                                                                      fname)
-                    assert fname.endswith(ext), message
-
-                    # we only want to do sequential testing on image file
-                    # that are generated from non-movie time-lapses
-                    if ext not in IMG_SEQUENCE_EXTENSIONS:
-                        continue
-                    data.append(int(os.path.splitext(fname)[0][1:]))
-
-                if not data:
-                    continue
-
-                message = "Sequence {}/{} is NOT sequential".format(sequence,
-                                                                    ext)
-                result = sorted(data) == list(range(min(data), max(data)+1))
-                assert result, message
-    
-    destination_directory = tempfile.mkdtemp()
-    try:
-        results = sort_sequences(tmp_root, destination_directory,
-                                 verbose=args.verbose,
-                                 dryrun=True if args.movie else args.dryrun,
-                                 movie=args.movie)
-        test_results(results)
-    except:
-        cleanup([tmp_root, destination_directory])
-        raise
-    else:
-        cleanup([tmp_root, destination_directory])
-
-
-def _main():
+def _parse_args():
     parser = argparse.ArgumentParser(usage=__doc__)
     parser.add_argument('paths', nargs='*',
                         default=[os.getcwd()],
@@ -369,9 +276,6 @@ def _main():
     parser.add_argument('-d', '--destination',
                         default=os.getcwd(),
                         help="Specify the destination path (must already exist)")
-    parser.add_argument('-u', '--unittest',
-                        action='store_true',
-                        help="Perform the unittests")
     parser.add_argument('-n', '--dryrun',
                         action='store_true',
                         help=("Runs the script but does not move files or "
@@ -383,16 +287,16 @@ def _main():
                         action='store_true',
                         help="Generates a movie file from the JPG sequence(s)")
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    if args.unittest:
-        _unittest(args)
-    else:
-        sort_sequences(args.paths,
-                       args.destination,
-                       dryrun=args.dryrun,
-                       verbose=args.verbose,
-                       movie=args.movie)
+
+def _main():
+    args = _parse_args()
+    sort_sequences(args.paths,
+                    args.destination,
+                    dryrun=args.dryrun,
+                    verbose=args.verbose,
+                    movie=args.movie)
 
 
 if __name__ == '__main__':
