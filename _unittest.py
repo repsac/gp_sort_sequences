@@ -22,7 +22,7 @@ def cleanup(paths):
 
 def test_results(results):
     assert len(results) != 0, "No media was found for testing"
-    for sequence in results:
+    for index, sequence in enumerate(results):
         for ext in results[sequence]:
             data = []
 
@@ -44,6 +44,7 @@ def test_results(results):
                                                                 ext)
             result = sorted(data) == list(range(min(data), max(data)+1))
             assert result, message
+        print("Test {} passed".format(index + 1))
 
 
 def _unittest(args):

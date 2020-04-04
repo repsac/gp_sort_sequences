@@ -87,8 +87,8 @@ MOVIE_EXTENSION = 'MP4'
 # If this string is changed you must ensure that the format()
 # parameters are satisfied in _build_command()
 FFMPEG = 'ffmpeg -r {fps:d} -f image2 -start_number {start_number} -i '\
-         '{input_file} -vf "scale={movie_width}:-1" -vcodec libx264 '\
-         '-crf 25 -pix_fmt yuv420p -y {output_file}'
+         '"{input_file}" -vf "scale={movie_width}:-1" -vcodec libx264 '\
+         '-crf 25 -pix_fmt yuv420p -y "{output_file}"'
 
 
 def sort_sequences(root_directory,
@@ -122,18 +122,23 @@ def sort_sequences(root_directory,
         __DRYRUN = y
 
     set_params(verbose, dryrun)
+    destination_directory = os.path.realpath(destination_directory)
 
     if not isinstance(root_directory, list):
         root_directory = [root_directory]
-    
+
+    for index, rd in enumerate(root_directory):
+        root_directory[index] = os.path.realpath(rd)
+
     try:
         file_mapping = _map_sequence_files(root_directory)
-        sorted_files = _sort_sequence_files(file_mapping, destination_directory)
+        sorted_files = _sort_sequence_files(file_mapping,
+                                            destination_directory)
         if movie:
             movies = _generate_movie(sorted_files)
             for sequence in movies:
                 sorted_files[sequence].update(movies[sequence])
-    except:
+    except Exception:
         set_params(False, False)
         raise
 
@@ -141,7 +146,7 @@ def sort_sequences(root_directory,
     return sorted_files
 
 
-def _build_command(sequence, name, ext):
+def _build_command(sequence, name):
     """
     Build out the command used to create a preview movie file
     """
@@ -150,10 +155,12 @@ def _build_command(sequence, name, ext):
         root=basename[0],
         seq=len(basename[1:]),
         ext=file_ext)
-    input_file = os.path.join(sequence, ext, input_file)
+    input_file = os.path.join(sequence, file_ext[1:], input_file)
     output_file = '{}.{}'.format(os.path.basename(sequence),
                                  MOVIE_EXTENSION)
-    output_file = os.path.join(sequence, output_file)
+    output_rootdir = os.path.join(sequence, MOVIE_EXTENSION)
+    _mkdir(output_rootdir)
+    output_file = os.path.join(output_rootdir, output_file)
     cmd = FFMPEG.format(fps=FPS,
                         input_file=input_file,
                         output_file=output_file,
@@ -175,16 +182,16 @@ def _generate_movie(sorted_files):
             if ext.upper() != IMG_SEQUENCE_EXTENSIONS[0]:
                 continue
             name = sorted_files[sequence][ext][0]
-            cmd, output_file = _build_command(sequence, name, ext)
+            cmd, output_file = _build_command(sequence, name)
 
             movies.setdefault(sequence, {}).setdefault(
                 MOVIE_EXTENSION, []).append(output_file)
 
+            _print("Running command: {}".format(cmd))
             if __DRYRUN:
-                _print("Running command: {}".format(cmd))
-                continue          
+                continue
 
-            proc = Popen(cmd)
+            proc = Popen(cmd, shell=True)
             proc.wait()
             if proc.returncode != 0:
                 message = "Failed to run command: {}".format(cmd)
@@ -201,7 +208,7 @@ def _sort_sequence_files(file_mapping, destination_directory):
 
     keys = [*file_mapping]
     keys.sort()
-    for k, g in groupby(enumerate(keys), lambda ix : ix[0] - ix[1]):
+    for k, g in groupby(enumerate(keys), lambda ix: ix[0] - ix[1]):
         seq_name = SEQUENCE_FOLDER.format(seq_counter)
         seq_folder_path = os.path.join(destination_directory, seq_name)
         sorted_files.update({seq_folder_path: {}})
@@ -238,8 +245,13 @@ def _map_sequence_files(root_directory):
     for each_folder in root_directory:
         for root, dirs, files in os.walk(each_folder):
             for fi in files:
+                if fi.startswith('.'):
+                    continue
                 name, ext = os.path.splitext(fi)
-                key = int(name[1:])
+                try:
+                    key = int(name[1:])
+                except ValueError:
+                    continue
                 file_mapping.setdefault(key, {}).update({
                     ext[1:]: os.path.join(root, fi)
                 })
@@ -275,7 +287,8 @@ def _parse_args():
                         help="Specify one or more root paths to search")
     parser.add_argument('-d', '--destination',
                         default=os.getcwd(),
-                        help="Specify the destination path (must already exist)")
+                        help="Specify the destination path "
+                             "(must already exist)")
     parser.add_argument('-n', '--dryrun',
                         action='store_true',
                         help=("Runs the script but does not move files or "
@@ -293,10 +306,10 @@ def _parse_args():
 def _main():
     args = _parse_args()
     sort_sequences(args.paths,
-                    args.destination,
-                    dryrun=args.dryrun,
-                    verbose=args.verbose,
-                    movie=args.movie)
+                   args.destination,
+                   dryrun=args.dryrun,
+                   verbose=args.verbose,
+                   movie=args.movie)
 
 
 if __name__ == '__main__':
