@@ -28,7 +28,7 @@ def test_results(results):
 
             for fname in results[sequence][ext]:
                 message = "Extensions mismatched {} != {}".format(ext,
-                                                                    fname)
+                                                                  fname)
                 assert fname.endswith(ext), message
 
                 # we only want to do sequential testing on image file
@@ -63,7 +63,7 @@ def _unittest(args):
             folders[-1].append('{:>07d}'.format(frame))
             counter -= 1
         first_frame = last_frame
-    
+
     tmp_root = tempfile.mkdtemp()
     folder_paths = []
     for index, folder in enumerate(folders):
@@ -83,7 +83,7 @@ def _unittest(args):
             break
         assert len(files) == 2000, "Incorrect number of files in {}".format(
             folder_path)
-    
+
     destination_directory = tempfile.mkdtemp()
     try:
         results = gp_sort_sequences.sort_sequences(
@@ -93,7 +93,7 @@ def _unittest(args):
             dryrun=True if args.movie else args.dryrun,
             movie=args.movie)
         test_results(results)
-    except:
+    except Exception:
         cleanup([tmp_root, destination_directory])
         raise
     else:
