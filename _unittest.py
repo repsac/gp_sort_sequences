@@ -94,9 +94,8 @@ def _unittest(args):
             movie=args.movie)
         test_results(results)
     except Exception:
-        cleanup([tmp_root, destination_directory])
         raise
-    else:
+    finally:
         cleanup([tmp_root, destination_directory])
 
 
